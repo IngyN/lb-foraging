@@ -87,7 +87,6 @@ class Viewer(object):
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
         script_dir = os.path.dirname(__file__)
-
         pyglet.resource.path = [os.path.join(script_dir, "icons")]
         pyglet.resource.reindex()
 
@@ -122,7 +121,8 @@ class Viewer(object):
         if return_rgb_array:
             buffer = pyglet.image.get_buffer_manager().get_color_buffer()
             image_data = buffer.get_image_data()
-            arr = np.frombuffer(image_data.get_data(), dtype=np.uint8)
+            # print(image_data.format, image_data.pitch)
+            arr = np.frombuffer(image_data.get_data(image_data.format, image_data.pitch), dtype=np.uint8)
             arr = arr.reshape(buffer.height, buffer.width, 4)
             arr = arr[::-1, :, 0:3]
         self.window.flip()

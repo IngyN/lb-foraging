@@ -25,7 +25,7 @@ class CellEntity(Enum):
     AGENT = 3
 
 
-class Player:
+class Player():
     def __init__(self):
         self.controller = None
         self.position = None
@@ -35,6 +35,9 @@ class Player:
         self.reward = 0
         self.history = None
         self.current_step = None
+
+    def set_position(self, position):
+        self.position = position
 
     def setup(self, position, level, field_size):
         self.history = []
@@ -82,6 +85,7 @@ class ForagingEnv(Env):
         sight,
         max_episode_steps,
         force_coop,
+        max_food_level = 1,
         normalize_reward=True,
         grid_observation=False,
     ):
@@ -96,8 +100,8 @@ class ForagingEnv(Env):
         self.max_player_level = max_player_level
         self.sight = sight
         self.force_coop = force_coop
+        self.max_food_level = max_food_level
         self._game_over = None
-
         self._rendering_initialized = False
         self._valid_actions = None
         self._max_episode_steps = max_episode_steps
@@ -269,6 +273,14 @@ class ForagingEnv(Env):
             food_count += 1
         self._food_spawned = self.field.sum()
 
+    def get_total_food(self):
+        return self.field.sum()
+
+    def get_player_positions(self):
+        res = tuple( tuple(p.position) for p in self.players)
+        return res
+
+
     def _is_empty_location(self, row, col):
         if self.field[row, col] != 0:
             return False
@@ -333,6 +345,23 @@ class ForagingEnv(Env):
 
     def get_valid_actions(self) -> list:
         return list(product(*[self._valid_actions[player] for player in self.players]))
+
+    def get_player_valid_actions(self, player) -> list:
+        valid_actions= []
+        for action in Action:
+            if self._is_valid_action(player, action):
+                valid_actions.append(action)
+
+        return valid_actions
+
+    # returns a n_agents by n_actions boolean array, 1-> action is available.
+    def get_available_actions(self) -> np.array:
+        valid_actions= np.zeros([self.n_agents, len(Action)], dtype=bool)
+        for i,player in enumerate(self.players):
+            for a,action in enumerate(Action):
+                    valid_actions[i][a] = self._is_valid_action(player, action)
+
+        return valid_actions
 
     def _make_obs(self, player):
         return self.Observation(
@@ -462,11 +491,14 @@ class ForagingEnv(Env):
         self.spawn_players(self.max_player_level)
         player_levels = sorted([player.level for player in self.players])
 
-        self.spawn_food(
-            self.max_food, max_level=sum(player_levels[:3])
-        )
+        if self.force_coop:
+            self.spawn_food(
+                self.max_food, max_level=sum(player_levels[:3])
+            )
+        else:
+            self.spawn_food(self.max_food, max_level= self.max_food_level)
         self.current_step = 0
-        self._game_over = False
+        self._game_over = False 
         self._gen_valid_moves()
 
         nobs, _, _, _ = self._make_gym_obs()
@@ -516,11 +548,13 @@ class ForagingEnv(Env):
                 loading_players.add(player)
 
         # and do movements for non colliding players
-
+        # Commented out collision part. 
+        #print(f'collisions {collisions.items()}')
         for k, v in collisions.items():
-            if len(v) > 1:  # make sure no more than an player will arrive at location
-                continue
-            v[0].position = k
+            # if len(v) > 1:  # make sure no more than an player will arrive at location
+            #     continue
+            for i in range(len(v)):
+                v[i].position = k
 
         # finally process the loadings:
         while loading_players:
